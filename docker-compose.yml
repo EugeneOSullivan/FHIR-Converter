@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  fhir-converter-api:
+    build:
+      context: ./src/Microsoft.Health.Fhir.Liquid.Converter.Api
+      dockerfile: Dockerfile
+    container_name: fhir-converter-api
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080;https://+:8081
+      - ASPNETCORE_Kestrel__Certificates__Default__Password=crypticpassword
+      - ASPNETCORE_Kestrel__Certificates__Default__Path=/https/aspnetapp.pfx
+      - FHIR_CONVERTER__TEMPLATE_DIRECTORY=/app/templates
+      - FHIR_CONVERTER__ENABLE_LOGGING=true
+      - FHIR_CONVERTER__ENABLE_METRICS=true
+      # Cloud Storage Configuration (GCP by default)
+      - TemplateHosting__CloudStorageConfiguration__Provider=GCP
+      - TemplateHosting__CloudStorageConfiguration__Gcp__ProjectId=${GCP_PROJECT_ID:-}
+      - TemplateHosting__CloudStorageConfiguration__Gcp__BucketName=${GCP_BUCKET_NAME:-fhir-converter-templates}
+      - TemplateHosting__CloudStorageConfiguration__Gcp__ContainerName=${GCP_CONTAINER_NAME:-templates}
+      # Azure Storage Configuration (alternative)
+      - TemplateHosting__CloudStorageConfiguration__Azure__StorageAccountName=${AZURE_STORAGE_ACCOUNT:-}
+      - TemplateHosting__CloudStorageConfiguration__Azure__ContainerName=${AZURE_CONTAINER_NAME:-templates}
+    volumes:
+      # Mount templates directory for development
+      - ./data/Templates:/app/templates:ro
+      # Mount sample data for testing
+      - ./data/SampleData:/app/sample-data:ro
+      # Development certificate
+      - ~/.aspnet/https:/https:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - fhir-converter-network
+
+  # Optional: Add a reverse proxy for production-like setup
+  nginx:
+    image: nginx:alpine
+    container_name: fhir-converter-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ~/.aspnet/https:/etc/nginx/ssl:ro
+    depends_on:
+      fhir-converter-api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fhir-converter-network
+    profiles:
+      - production
+
+  # Optional: Add monitoring with Prometheus and Grafana
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fhir-converter-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      - fhir-converter-network
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fhir-converter-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - fhir-converter-network
+    profiles:
+      - monitoring
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  fhir-converter-network:
+    driver: bridge 

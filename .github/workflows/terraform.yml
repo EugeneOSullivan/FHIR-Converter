@@ -1,0 +1,255 @@
+name: 'Terraform GCP Deployment'
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'terraform/gcp/**/*'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'terraform/gcp/**/*'
+
+env:
+  TF_VERSION: '1.5.0'
+  TERRAGRUNT_VERSION: '0.45.0'
+
+jobs:
+  validate:
+    name: 'Validate Terraform'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      run: |
+        curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64 -o terragrunt
+        chmod +x terragrunt
+        sudo mv terragrunt /usr/local/bin/
+
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Configure Google Cloud CLI
+      run: |
+        gcloud auth activate-service-account --key-file=${{ secrets.GCP_SA_KEY }}
+        gcloud config set project ${{ secrets.GCP_PROJECT_ID }}
+
+    - name: Terraform Format Check
+      run: |
+        cd terraform/gcp
+        terraform fmt -check -recursive
+
+    - name: Terraform Init
+      run: |
+        cd terraform/gcp
+        terragrunt run-all init
+
+    - name: Terraform Validate
+      run: |
+        cd terraform/gcp
+        terragrunt run-all validate
+
+    - name: Terraform Plan
+      run: |
+        cd terraform/gcp
+        terragrunt run-all plan --terragrunt-non-interactive
+      env:
+        TF_VAR_organization_id: ${{ secrets.GCP_ORG_ID }}
+        TF_VAR_project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+  deploy-dev:
+    name: 'Deploy to Development'
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/develop' && github.event_name == 'push'
+    environment: development
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      run: |
+        curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64 -o terragrunt
+        chmod +x terragrunt
+        sudo mv terragrunt /usr/local/bin/
+
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_DEV_SA_KEY }}
+        project_id: ${{ secrets.GCP_DEV_PROJECT_ID }}
+
+    - name: Configure Google Cloud CLI
+      run: |
+        gcloud auth activate-service-account --key-file=${{ secrets.GCP_DEV_SA_KEY }}
+        gcloud config set project ${{ secrets.GCP_DEV_PROJECT_ID }}
+
+    - name: Deploy to Development
+      run: |
+        cd terraform/gcp/environments/dev
+        terragrunt apply --terragrunt-non-interactive --auto-approve
+      env:
+        TF_VAR_organization_id: ${{ secrets.GCP_ORG_ID }}
+        TF_VAR_project_id: ${{ secrets.GCP_DEV_PROJECT_ID }}
+
+    - name: Health Check
+      run: |
+        sleep 30
+        curl -f ${{ secrets.DEV_SERVICE_URL }}/health
+
+  deploy-staging:
+    name: 'Deploy to Staging'
+    needs: [validate, deploy-dev]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: staging
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      run: |
+        curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64 -o terragrunt
+        chmod +x terragrunt
+        sudo mv terragrunt /usr/local/bin/
+
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_STAGING_SA_KEY }}
+        project_id: ${{ secrets.GCP_STAGING_PROJECT_ID }}
+
+    - name: Configure Google Cloud CLI
+      run: |
+        gcloud auth activate-service-account --key-file=${{ secrets.GCP_STAGING_SA_KEY }}
+        gcloud config set project ${{ secrets.GCP_STAGING_PROJECT_ID }}
+
+    - name: Deploy to Staging
+      run: |
+        cd terraform/gcp/environments/staging
+        terragrunt apply --terragrunt-non-interactive --auto-approve
+      env:
+        TF_VAR_organization_id: ${{ secrets.GCP_ORG_ID }}
+        TF_VAR_project_id: ${{ secrets.GCP_STAGING_PROJECT_ID }}
+
+    - name: Health Check
+      run: |
+        sleep 30
+        curl -f ${{ secrets.STAGING_SERVICE_URL }}/health
+
+  deploy-prod:
+    name: 'Deploy to Production'
+    needs: [validate, deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: production
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ env.TF_VERSION }}
+
+    - name: Setup Terragrunt
+      run: |
+        curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v${{ env.TERRAGRUNT_VERSION }}/terragrunt_linux_amd64 -o terragrunt
+        chmod +x terragrunt
+        sudo mv terragrunt /usr/local/bin/
+
+    - name: Setup Google Cloud CLI
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        service_account_key: ${{ secrets.GCP_PROD_SA_KEY }}
+        project_id: ${{ secrets.GCP_PROD_PROJECT_ID }}
+
+    - name: Configure Google Cloud CLI
+      run: |
+        gcloud auth activate-service-account --key-file=${{ secrets.GCP_PROD_SA_KEY }}
+        gcloud config set project ${{ secrets.GCP_PROD_PROJECT_ID }}
+
+    - name: Deploy to Production
+      run: |
+        cd terraform/gcp/environments/prod
+        terragrunt apply --terragrunt-non-interactive --auto-approve
+      env:
+        TF_VAR_organization_id: ${{ secrets.GCP_ORG_ID }}
+        TF_VAR_project_id: ${{ secrets.GCP_PROD_PROJECT_ID }}
+
+    - name: Health Check
+      run: |
+        sleep 30
+        curl -f ${{ secrets.PROD_SERVICE_URL }}/health
+
+  security-scan:
+    name: 'Security Scan'
+    needs: [deploy-dev, deploy-staging, deploy-prod]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        scan-type: 'fs'
+        scan-ref: '.'
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      if: always()
+      with:
+        sarif_file: 'trivy-results.sarif' 

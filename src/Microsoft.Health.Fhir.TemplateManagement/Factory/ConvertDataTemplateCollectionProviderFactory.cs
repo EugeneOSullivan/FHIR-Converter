@@ -7,6 +7,7 @@ using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
 using EnsureThat;
+using Google.Cloud.Storage.V1;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using Microsoft.Health.Fhir.TemplateManagement.ArtifactProviders;
@@ -30,14 +31,28 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Factory
 
         /// <summary>
         /// Returns the appropriate template collection provider based on the configuration.
-        /// E.g., If storage account configuration is provided, then a blob template collection provider is returned.
-        /// Otherwise, the default template collection provider is returned.
+        /// Supports Azure Blob Storage, GCP Storage, and default templates.
         /// </summary>
         /// <returns>Returns a template collection provider based on the configuration.</returns>
         public IConvertDataTemplateCollectionProvider CreateTemplateCollectionProvider()
         {
             var templateHostingConfiguration = _templateCollectionConfiguration.TemplateHostingConfiguration;
 
+            // Check for cloud storage configuration first (new approach)
+            if (templateHostingConfiguration?.CloudStorageConfiguration != null)
+            {
+                var cloudConfig = templateHostingConfiguration.CloudStorageConfiguration;
+                var providerConfig = cloudConfig.GetProviderConfiguration();
+
+                return cloudConfig.Provider switch
+                {
+                    CloudProviderType.Azure => CreateBlobTemplateCollectionProvider(providerConfig),
+                    CloudProviderType.GCP => CreateGcpStorageTemplateCollectionProvider(providerConfig),
+                    _ => throw new ArgumentException($"Unsupported cloud provider: {cloudConfig.Provider}")
+                };
+            }
+
+            // Fallback to legacy Azure configuration
             if (templateHostingConfiguration?.StorageAccountConfiguration?.ContainerUrl != null)
             {
                 return CreateBlobTemplateCollectionProvider(templateHostingConfiguration.StorageAccountConfiguration);
@@ -64,7 +79,31 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Factory
         }
 
         /// <summary>
-        /// Returns a blob template collection provider, i.e., template provider that references the templates stored in a blob container.
+        /// Returns a blob template collection provider for Azure Storage.
+        /// </summary>
+        /// <param name="storageConfiguration">Storage configuration containing information of the blob container to load the templates from.</param>
+        /// <returns>Returns a blob template collection provider, <see cref="BlobTemplateCollectionProvider">.</returns>
+        private IConvertDataTemplateCollectionProvider CreateBlobTemplateCollectionProvider(IStorageConfiguration storageConfiguration)
+        {
+            EnsureArg.IsNotNull(storageConfiguration, nameof(storageConfiguration));
+
+            TokenCredential tokenCredential = new DefaultAzureCredential();
+            var containerUrl = new Uri(storageConfiguration.GetContainerUrl());
+            var blobContainerClient = new BlobContainerClient(containerUrl, tokenCredential);
+
+            var cacheKey = _storageTemplateProviderCachePrefix + blobContainerClient.Name;
+            if (_memoryCache.TryGetValue(cacheKey, out var templateProviderCache))
+            {
+                return (IConvertDataTemplateCollectionProvider)templateProviderCache;
+            }
+
+            var templateProvider = new BlobTemplateCollectionProvider(blobContainerClient, _memoryCache, _templateCollectionConfiguration);
+            _memoryCache.Set(cacheKey, templateProvider);
+            return templateProvider;
+        }
+
+        /// <summary>
+        /// Returns a blob template collection provider for legacy Azure Storage configuration.
         /// </summary>
         /// <param name="storageAccountConfiguration">Storage account configuration containing information of the blob container to load the templates from.</param>
         /// <returns>Returns a blob template collection provider, <see cref="BlobTemplateCollectionProvider">.</returns>
@@ -83,6 +122,40 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Factory
             }
 
             var templateProvider = new BlobTemplateCollectionProvider(blobContainerClient, _memoryCache, _templateCollectionConfiguration);
+            _memoryCache.Set(cacheKey, templateProvider);
+            return templateProvider;
+        }
+
+        /// <summary>
+        /// Returns a GCP Storage template collection provider.
+        /// </summary>
+        /// <param name="storageConfiguration">Storage configuration containing information of the GCS bucket to load the templates from.</param>
+        /// <returns>Returns a GCP Storage template collection provider, <see cref="GcpStorageTemplateCollectionProvider">.</returns>
+        private IConvertDataTemplateCollectionProvider CreateGcpStorageTemplateCollectionProvider(IStorageConfiguration storageConfiguration)
+        {
+            EnsureArg.IsNotNull(storageConfiguration, nameof(storageConfiguration));
+
+            var gcpConfig = storageConfiguration as GcpStorageConfiguration;
+            if (gcpConfig == null)
+            {
+                throw new ArgumentException("Storage configuration must be of type GcpStorageConfiguration for GCP provider");
+            }
+
+            var storageClient = StorageClient.Create();
+            var cacheKey = _storageTemplateProviderCachePrefix + gcpConfig.BucketName + gcpConfig.ContainerName;
+            
+            if (_memoryCache.TryGetValue(cacheKey, out var templateProviderCache))
+            {
+                return (IConvertDataTemplateCollectionProvider)templateProviderCache;
+            }
+
+            var templateProvider = new GcpStorageTemplateCollectionProvider(
+                storageClient, 
+                gcpConfig.BucketName, 
+                gcpConfig.ContainerName, 
+                _memoryCache, 
+                _templateCollectionConfiguration);
+            
             _memoryCache.Set(cacheKey, templateProvider);
             return templateProvider;
         }

@@ -1,101 +1,381 @@
-# FHIR Converter
+# Microsoft FHIR-Converter (Cloud-Agnostic Edition)
 
-FHIR converter is an open source project that enables conversion of health data from legacy formats to and from FHIR.  The FHIR converter uses the [Liquid template language](https://shopify.github.io/liquid/) and the .NET runtime.
+> **Based on the original [Microsoft FHIR-Converter](https://github.com/microsoft/FHIR-Converter)**
 
-The FHIR converter supports the following conversions: **HL7v2 to FHIR**, **C-CDA to FHIR**, **JSON to FHIR**, **FHIR STU3 to R4**, and **FHIR to HL7v2** (*Preview*).
+A modern, cloud-agnostic, high-performance healthcare data conversion engine supporting HL7v2, C-CDA, FHIR, and custom formats. Easily deployable on GCP, Azure, or locally, with robust API, Docker, monitoring, and enterprise-grade infrastructure as code.
 
-The converter uses templates that define mappings between these different data formats. The templates are written in [Liquid](https://shopify.github.io/liquid/) templating language and make use of custom [filters](docs/Filters-and-Tags.md).  
+---
 
-The converter comes with a few ready-to-use templates. If needed, you can create a new template, or modify existing templates to meet your specific conversion requirements. The provided templates are based off of HL7 v2.8. Other versions may require you to make modifications to these templates on your own. See [Templates & Authoring](#templates--authoring) for specifics.
+## Quick Start
 
-## What's New?
-The latest iteration of the *Preview* FHIR converter makes some significant changes over [previous versions](#previous-versions).
+### Local Development (No Cloud Required)
+```bash
+# Clone the repository
+git clone https://github.com/your-org/FHIR-Converter.git
+cd FHIR-Converter
 
-Some of the changes include:
- * Containerized API
- * Support Azure Storage for customer templates.
- * Removal of Azure Container repository dependency for custom templates.
- * Support for FHIR to HL7v2 conversion.
+# Run the API locally
+export ASPNETCORE_ENVIRONMENT=Development
+dotnet run --project src/Microsoft.Health.Fhir.Liquid.Converter.Api
 
- All the documentation for the new *preview* FHIR converter API can be found in the [How to Guides](docs/how-to-guides/) folder.
+# Or use Docker Compose
+docker-compose up
+```
+
+### Cloud Deployment
+```bash
+# GCP Deployment (with Terraform)
+cd terraform/gcp
+./deploy.sh install
+./deploy.sh setup
+./deploy.sh dev
+
+# Or use CI/CD
+# Push to develop branch for dev deployment
+# Push to main branch for staging/prod deployment
+```
+
+---
 
 ## Architecture
 
-The FHIR converter API *preview* provides [REST based APIs](#api) to perform conversion requests.
+### Core Components
+- **API Service**: ASP.NET Core 8.0 Web API with health checks and monitoring
+- **Template Engine**: Liquid templating for flexible data transformation
+- **Cloud Storage**: GCP GCS or Azure Blob Storage for template management
+- **Containerization**: Multi-stage Docker builds with security scanning
+- **Infrastructure**: Terraform/Terragrunt for multi-environment deployment
+- **Monitoring**: Cloud-native monitoring with dashboards and alerting
 
-The FHIR converter APIs are offered as a container artifact in [Microsoft Container Registry](https://github.com/microsoft/containerregistry).
-This image can be downloaded and run as a web service on a container hosting platform in your Azure tenant; that clients can target for conversion requests.
+### Supported Formats
+- **HL7v2** → FHIR R4
+- **C-CDA** → FHIR R4
+- **JSON** → FHIR R4
+- **FHIR STU3** → FHIR R4
+- **FHIR** → HL7v2
 
-![Convert setup](/docs/images/convert-setup.png)
+### Cloud Providers
+- **GCP**: Cloud Run, GCS, Cloud Monitoring, API Gateway
+- **Azure**: Container Instances, Blob Storage, Application Insights
+- **Local**: Docker Compose with local templates
 
-## Templates & Authoring
+---
 
-The FHIR converter API comes with several pre-built templates you can use as reference as to create your own.
+## Project Structure
 
-| Conversion | Notes |
-| ----- | ----- |
-| [HL7v2 to FHIR](/docs/HL7v2-templates.md)| Important points to note for HL7v2 to FHIR conversion: [see here](docs/HL7v2-ImportantPoints.md) <br> Common FHIR Validator errors/warning you might run into, and their explanations: [see here](docs/HL7v2-FHIRValidator.md) | 
-| [C-CDA to FHIR](/data/Templates/Ccda/) | | 
-| [JSON to FHIR](/data/Templates/Json/) | | 
-| [FHIR STU3 to R4](/data/Templates/Stu3ToR4/) | [Differences between STU3 & R4](/docs/Stu3R4-resources-differences.md) | 
-| FHIR to HL7v2 (*Preview*) | |
+```
+FHIR-Converter/
+├── src/
+│   ├── Microsoft.Health.Fhir.Liquid.Converter.Api/     # Web API project
+│   ├── Microsoft.Health.Fhir.Liquid.Converter/         # Core converter logic
+│   └── Microsoft.Health.Fhir.TemplateManagement/       # Template management
+├── data/
+│   ├── Templates/                                       # FHIR templates
+│   └── SampleData/                                      # Test data
+├── terraform/
+│   └── gcp/                                            # GCP infrastructure
+│       ├── modules/                                     # Reusable modules
+│       ├── environments/                                # Environment configs
+│       └── deploy.sh                                   # Deployment script
+├── docker-compose.yml                                  # Local development
+├── Dockerfile                                          # Container build
+├── azure-pipelines.yml                                 # Azure DevOps CI/CD
+└── .github/workflows/                                  # GitHub Actions CI/CD
+```
 
-### Concepts
+---
 
-In addition to the example [templates](data/Templates) provided there are several important concepts to review and consider when creating your own templates, including:
-- [Filters summary](docs/Filters-and-Tags.md)
-- [Snippet concept](docs/SnippetConcept.md)
-- [Resource Id generation](docs/concepts/resource-id-generation.md)
-- [Validation & post processing](docs/concepts/validation-and-postprocessing.md)
+## Development
 
-To use your custom templates, the FHIR converter API offers robust support for storing and retrieving your templates from Azure storage. For more information see: [Template Store Integration](/docs/how-to-guides/enable-template-store-integration.md).
+### Prerequisites
+- .NET 8.0 SDK
+- Docker & Docker Compose
+- Terraform 1.5+ (for cloud deployment)
+- Terragrunt 0.45+ (for multi-environment management)
 
-## Deployment
+### Local Development
+```bash
+# Run API with local templates
+dotnet run --project src/Microsoft.Health.Fhir.Liquid.Converter.Api
 
-You can deploy the FHIR converter API using the instructions found [here](/docs/how-to-guides/deployment-options.md).  The default deployment will deploy the FHIR Conventer API container hosted on Azure Container Apps.
+# Run with Docker Compose (includes monitoring)
+docker-compose up
 
-## API
+# Run tests
+dotnet test
+```
 
-The conversion APIs process the provided input data of the specified format and use the specified Liquid template (default or custom) and return the converted result as per the transformations in the template.
+### API Endpoints
+```bash
+# Health check
+curl http://localhost:8080/health
 
-![Convert API summary](docs/images/convert-api-summary.png)
+# Convert HL7v2 to FHIR
+curl -X POST http://localhost:8080/api/convert/hl7v2 \
+  -H "Content-Type: application/json" \
+  -d '{"message": "MSH|^~\\&|SENDING_APP|SENDING_FACILITY|RECEIVING_APP|RECEIVING_FACILITY|20231201120000||ADT^A01|MSG00001|P|2.5"}'
 
-Complete details on the FHIR converter APIs and examples can be found [here](/docs/how-to-guides/use-convert-web-apis.md).
+# Convert C-CDA to FHIR
+curl -X POST http://localhost:8080/api/convert/ccda \
+  -H "Content-Type: application/json" \
+  -d '{"document": "<ClinicalDocument>...</ClinicalDocument>"}'
 
-## Troubleshooting
+# Convert FHIR STU3 to R4
+curl -X POST http://localhost:8080/api/convert/stu3-to-r4 \
+  -H "Content-Type: application/json" \
+  -d '{"stu3_resource": {...}}'
+```
 
-Some key concepts to consider:
-* Processing time is related to both the input message size, template, and logic contained in the template.  If your template is taking a long time to execute make sure you don't have any unnecessary loops.
-* The output of the template is expected to be JSON when the target is FHIR.
-* When converting data to FHIR, [post processing](https://github.com/microsoft/FHIR-Converter/blob/main/src/Microsoft.Health.Fhir.Liquid.Converter/OutputProcessors/PostProcessor.cs) is performed.  If you are seeing unexpected results, double check the post processing logic. 
-* If you want a deeper understanding on how data is converted, look at the functional tests found [here](https://github.com/microsoft/FHIR-Converter/blob/main/src/Microsoft.Health.Fhir.Liquid.Converter.FunctionalTests/ConvertDataTemplateCollectionProviderFunctionalTests.cs)
+---
 
-Detailed troubleshooting options for your deployed FHIR converter API can be found [here](docs/how-to-guides/troubleshoot.md).
+## Cloud Deployment
 
-## Previous Versions
-Detailed documentation of prior Converter release is covered in the table below.
+### GCP Deployment (Recommended)
 
-|  Version | Summary | 
-| ----- |  ----- |
-| [5.x Liquid](https://github.com/microsoft/FHIR-Converter/tree/e49b56f165e5607726063c681e90a28e68e39133) | Liquid engine release covers: <br> 1. HL7v2, CCDA, and JSON to FHIR transformations. <br> 2. Command Line utility. <br> 3. VS Code authoring extension. <br> 4. FHIR Service $convert integration. <br> 5. ACR template storage. |
-| [3.x Handlebars](https://github.com/microsoft/FHIR-Converter/tree/handlebars) | Previous handlebars base solution.  No longer supported. See full comparision [here](https://github.com/microsoft/FHIR-Converter/tree/e49b56f165e5607726063c681e90a28e68e39133?tab=readme-ov-file#fhir-converter).
+#### Quick Deploy
+```bash
+cd terraform/gcp
+./deploy.sh install    # Install tools
+./deploy.sh setup      # Setup authentication
+./deploy.sh dev        # Deploy development
+```
 
-## External resources
+#### Multi-Environment Deployment
+```bash
+# Deploy all environments
+./deploy.sh deploy
 
-- [DotLiquid wiki](https://github.com/dotliquid/dotliquid/wiki)
-- [Liquid wiki](https://github.com/Shopify/liquid/wiki)
-- [HL7 Community 2-To-FHIR-Project](https://confluence.hl7.org/display/OO/2-To-FHIR+Project)
- 
+# Or deploy specific environments
+./deploy.sh staging
+./deploy.sh prod
+```
+
+#### Infrastructure Features
+- **Cloud Run**: Serverless container hosting with auto-scaling
+- **GCS Bucket**: Template storage with versioning
+- **VPC Network**: Private network with VPC connector
+- **API Gateway**: External access with OpenAPI spec
+- **Cloud Monitoring**: Dashboards, alerting, and logging
+- **Cloud Armor**: DDoS protection (production)
+
+### Azure Deployment
+```bash
+# Use Azure Container Instances or App Service
+# See CLOUD_STORAGE_README.md for Azure setup
+```
+
+---
+
+## Configuration
+
+### Environment Variables
+```bash
+# Cloud Storage Configuration
+CloudStorageConfiguration__Provider=GCP                    # GCP, Azure, or null for local
+CloudStorageConfiguration__GcpBucketName=your-bucket      # GCS bucket name
+CloudStorageConfiguration__GcpProjectId=your-project      # GCP project ID
+
+# API Configuration
+ASPNETCORE_ENVIRONMENT=Development                         # Development, Staging, Production
+Logging__LogLevel__Default=Information                     # Logging level
+```
+
+### Template Storage
+- **Local**: Uses `data/Templates/` directory
+- **GCP**: GCS bucket with versioning and lifecycle policies
+- **Azure**: Blob storage with managed identity
+- **Hybrid**: Mix of local and cloud templates
+
+---
+
+## Monitoring & Observability
+
+### Local Monitoring
+```bash
+# Prometheus metrics
+curl http://localhost:8080/metrics
+
+# Health check
+curl http://localhost:8080/health
+
+# Grafana dashboard
+open http://localhost:3000
+```
+
+### Cloud Monitoring (GCP)
+- **Cloud Monitoring Dashboard**: Custom metrics and visualizations
+- **Alert Policies**: Error rate, latency, and availability monitoring
+- **Logging**: Structured logs with BigQuery integration
+- **Uptime Checks**: Automated health monitoring
+
+### Metrics Available
+- Request count and latency
+- Error rates and status codes
+- CPU and memory utilization
+- Template cache hit rates
+- Conversion success/failure rates
+
+---
+
+## Security
+
+### Network Security
+- **VPC**: Private network isolation
+- **VPC Connector**: Secure Cloud Run connectivity
+- **API Gateway**: Controlled external access
+- **Cloud Armor**: DDoS protection (production)
+
+### Access Control
+- **Service Accounts**: Least-privilege access
+- **IAM Roles**: Role-based permissions
+- **Private Service**: Network isolation (production)
+- **Audit Logging**: Comprehensive audit trails
+
+### Data Protection
+- **Encryption**: At-rest and in-transit encryption
+- **TLS**: HTTPS everywhere
+- **Secrets Management**: Secure credential handling
+- **Compliance**: HIPAA-ready configurations
+
+---
+
+## CI/CD
+
+### GitHub Actions
+- **Triggers**: Push to main/develop branches
+- **Environments**: Development, staging, production
+- **Security**: Automated vulnerability scanning
+- **Testing**: Health checks and integration tests
+
+### Azure DevOps
+- **Multi-stage**: Validate, deploy, test
+- **Environments**: Approval gates for production
+- **Monitoring**: Post-deployment health checks
+- **Rollback**: Automated rollback on failures
+
+### Deployment Flow
+1. **Development**: Auto-deploy on push to develop
+2. **Staging**: Auto-deploy on push to main
+3. **Production**: Manual approval required
+4. **Monitoring**: Automated health checks and alerts
+
+---
+
+## Testing
+
+### Unit Tests
+```bash
+dotnet test src/Microsoft.Health.Fhir.Liquid.Converter.UnitTests/
+dotnet test src/Microsoft.Health.Fhir.TemplateManagement.UnitTests/
+```
+
+### Integration Tests
+```bash
+dotnet test src/Microsoft.Health.Fhir.Liquid.Converter.FunctionalTests/
+```
+
+### API Tests
+```bash
+# Health check
+curl -f http://localhost:8080/health
+
+# Sample conversion
+curl -X POST http://localhost:8080/api/convert/hl7v2 \
+  -H "Content-Type: application/json" \
+  -d @data/SampleData/Hl7v2/ADT-A01-01.hl7
+```
+
+### Load Testing
+```bash
+# Use tools like Apache Bench or Artillery
+ab -n 1000 -c 10 http://localhost:8080/health
+```
+
+---
+
+## Documentation
+
+### Core Documentation
+- [API Documentation](src/Microsoft.Health.Fhir.Liquid.Converter.Api/README.md) - API usage and endpoints
+- [Cloud Storage Setup](CLOUD_STORAGE_README.md) - GCP/Azure configuration
+- [Docker Compose Guide](DOCKER_COMPOSE_README.md) - Local development with monitoring
+- [Terraform Deployment](terraform/gcp/README.md) - Infrastructure as code
+
+### Architecture Guides
+- [Template Management](docs/concepts/template-management.md) - How templates work
+- [Conversion Process](docs/concepts/conversion-process.md) - Data transformation flow
+- [Security Model](docs/concepts/security.md) - Security and compliance
+
+### Migration Guides
+- [From Original FHIR-Converter](docs/migration/from-original.md) - Migration from Microsoft's version
+- [Cloud Provider Migration](docs/migration/cloud-migration.md) - Moving between GCP/Azure
+
+---
+
 ## Contributing
 
-This project welcomes contributions and suggestions.  Most contributions require you to agree to a
-Contributor License Agreement (CLA) declaring that you have the right to, and actually do, grant us
-the rights to use your contribution. For details, visit [the CLA site](https://cla.opensource.microsoft.com).
+### Development Workflow
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests and documentation
+5. Submit a pull request
 
-When you submit a pull request, a CLA bot will automatically determine whether you need to provide
-a CLA and decorate the PR appropriately (e.g., status check, comment). Simply follow the instructions
-provided by the bot. You will only need to do this once across all repos using our CLA.
+### Code Standards
+- Follow .NET coding conventions
+- Add unit tests for new features
+- Update documentation
+- Use conventional commit messages
 
-This project has adopted the [Microsoft Open Source Code of Conduct](https://opensource.microsoft.com/codeofconduct/).
-For more information see the [Code of Conduct FAQ](https://opensource.microsoft.com/codeofconduct/faq/) or
-contact [opencode@microsoft.com](mailto:opencode@microsoft.com) with any additional questions or comments.
+### Testing Checklist
+- [ ] Unit tests pass
+- [ ] Integration tests pass
+- [ ] API tests pass
+- [ ] Documentation updated
+- [ ] Security scan clean
+
+---
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+### Acknowledgments
+- Based on the original [Microsoft FHIR-Converter](https://github.com/microsoft/FHIR-Converter)
+- Uses Liquid templating engine for data transformation
+- Built with ASP.NET Core 8.0 and .NET 8.0
+
+---
+
+## Support
+
+### Getting Help
+1. Check the [documentation](#documentation)
+2. Review [troubleshooting guides](docs/troubleshooting/)
+3. Search [existing issues](https://github.com/your-org/FHIR-Converter/issues)
+4. Create a [new issue](https://github.com/your-org/FHIR-Converter/issues/new)
+
+### Community
+- **Discussions**: [GitHub Discussions](https://github.com/your-org/FHIR-Converter/discussions)
+- **Issues**: [GitHub Issues](https://github.com/your-org/FHIR-Converter/issues)
+- **Releases**: [GitHub Releases](https://github.com/your-org/FHIR-Converter/releases)
+
+---
+
+## Roadmap
+
+### Upcoming Features
+- [ ] Additional FHIR versions support
+- [ ] Custom template validation
+- [ ] Advanced monitoring dashboards
+- [ ] Multi-region deployment
+- [ ] Performance optimizations
+
+### Known Limitations
+- Template caching in memory (planned: Redis integration)
+- Single-region deployment (planned: multi-region)
+- Limited custom validation (planned: extensible validation)
+
+---
+
+*This project extends the original Microsoft FHIR-Converter with modern cloud-native features, improved developer experience, and enterprise-grade deployment capabilities.*

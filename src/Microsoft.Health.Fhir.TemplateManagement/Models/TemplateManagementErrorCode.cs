@@ -32,6 +32,7 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Models
         // TemplateCollectionTooLargeException
         ImageSizeTooLarge = 2701,
         BlobTemplateCollectionTooLarge = 2702,
+        GcpTemplateCollectionTooLarge = 2703,
 
         // ArtifactArchiveException
         DecompressArtifactFailed = 2801,
@@ -50,5 +51,8 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Models
         OrasProcessFailed = 3202,
         OrasCacheManifestFailed = 3203,
         OrasCacheBlobFailed = 3204,
+
+        // GCP Storage Exception
+        GcpTemplateCollectionError = 3301,
     }
 }

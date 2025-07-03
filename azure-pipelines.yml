@@ -1,0 +1,234 @@
+trigger:
+  branches:
+    include:
+    - main
+    - develop
+  paths:
+    include:
+    - terraform/gcp/**/*
+
+variables:
+  - group: fhir-converter-gcp-variables
+  - name: terraformVersion
+    value: '1.5.0'
+  - name: terragruntVersion
+    value: '0.45.0'
+
+stages:
+- stage: Validate
+  displayName: 'Validate Terraform'
+  jobs:
+  - job: Validate
+    displayName: 'Validate Configuration'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.9'
+        addToPath: true
+
+    - script: |
+        curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+        sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs)"
+        sudo apt-get update && sudo apt-get install terraform=$(terraformVersion)
+      displayName: 'Install Terraform'
+
+    - script: |
+        curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v$(terragruntVersion)/terragrunt_linux_amd64 -o terragrunt
+        chmod +x terragrunt
+        sudo mv terragrunt /usr/local/bin/
+      displayName: 'Install Terragrunt'
+
+    - task: GoogleCloudSDK@0
+      inputs:
+        version: 'latest'
+        updateComponents: true
+        defaultGCPServiceAccount: true
+
+    - script: |
+        gcloud auth activate-service-account --key-file=$(System.DefaultWorkingDirectory)/gcp-key.json
+        gcloud config set project $(GCP_PROJECT_ID)
+      displayName: 'Authenticate with GCP'
+
+    - script: |
+        cd terraform/gcp
+        terragrunt run-all validate
+      displayName: 'Validate Terraform Configuration'
+
+    - script: |
+        cd terraform/gcp
+        terragrunt run-all plan --terragrunt-non-interactive
+      displayName: 'Plan Terraform Changes'
+
+- stage: DeployDev
+  displayName: 'Deploy to Development'
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/develop'))
+  jobs:
+  - deployment: DeployDev
+    displayName: 'Deploy to Development Environment'
+    environment: 'development'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.9'
+              addToPath: true
+
+          - script: |
+              curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+              sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs)"
+              sudo apt-get update && sudo apt-get install terraform=$(terraformVersion)
+            displayName: 'Install Terraform'
+
+          - script: |
+              curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v$(terragruntVersion)/terragrunt_linux_amd64 -o terragrunt
+              chmod +x terragrunt
+              sudo mv terragrunt /usr/local/bin/
+            displayName: 'Install Terragrunt'
+
+          - task: GoogleCloudSDK@0
+            inputs:
+              version: 'latest'
+              updateComponents: true
+              defaultGCPServiceAccount: true
+
+          - script: |
+              gcloud auth activate-service-account --key-file=$(System.DefaultWorkingDirectory)/gcp-key.json
+              gcloud config set project $(GCP_DEV_PROJECT_ID)
+            displayName: 'Authenticate with GCP Dev'
+
+          - script: |
+              cd terraform/gcp/environments/dev
+              terragrunt apply --terragrunt-non-interactive --auto-approve
+            displayName: 'Deploy to Development'
+
+- stage: DeployStaging
+  displayName: 'Deploy to Staging'
+  dependsOn: DeployDev
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployStaging
+    displayName: 'Deploy to Staging Environment'
+    environment: 'staging'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.9'
+              addToPath: true
+
+          - script: |
+              curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+              sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs)"
+              sudo apt-get update && sudo apt-get install terraform=$(terraformVersion)
+            displayName: 'Install Terraform'
+
+          - script: |
+              curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v$(terragruntVersion)/terragrunt_linux_amd64 -o terragrunt
+              chmod +x terragrunt
+              sudo mv terragrunt /usr/local/bin/
+            displayName: 'Install Terragrunt'
+
+          - task: GoogleCloudSDK@0
+            inputs:
+              version: 'latest'
+              updateComponents: true
+              defaultGCPServiceAccount: true
+
+          - script: |
+              gcloud auth activate-service-account --key-file=$(System.DefaultWorkingDirectory)/gcp-key.json
+              gcloud config set project $(GCP_STAGING_PROJECT_ID)
+            displayName: 'Authenticate with GCP Staging'
+
+          - script: |
+              cd terraform/gcp/environments/staging
+              terragrunt apply --terragrunt-non-interactive --auto-approve
+            displayName: 'Deploy to Staging'
+
+- stage: DeployProd
+  displayName: 'Deploy to Production'
+  dependsOn: DeployStaging
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+  jobs:
+  - deployment: DeployProd
+    displayName: 'Deploy to Production Environment'
+    environment: 'production'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '3.9'
+              addToPath: true
+
+          - script: |
+              curl -fsSL https://apt.releases.hashicorp.com/gpg | sudo apt-key add -
+              sudo apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs)"
+              sudo apt-get update && sudo apt-get install terraform=$(terraformVersion)
+            displayName: 'Install Terraform'
+
+          - script: |
+              curl -fsSL https://github.com/gruntwork-io/terragrunt/releases/download/v$(terragruntVersion)/terragrunt_linux_amd64 -o terragrunt
+              chmod +x terragrunt
+              sudo mv terragrunt /usr/local/bin/
+            displayName: 'Install Terragrunt'
+
+          - task: GoogleCloudSDK@0
+            inputs:
+              version: 'latest'
+              updateComponents: true
+              defaultGCPServiceAccount: true
+
+          - script: |
+              gcloud auth activate-service-account --key-file=$(System.DefaultWorkingDirectory)/gcp-key.json
+              gcloud config set project $(GCP_PROD_PROJECT_ID)
+            displayName: 'Authenticate with GCP Production'
+
+          - script: |
+              cd terraform/gcp/environments/prod
+              terragrunt apply --terragrunt-non-interactive --auto-approve
+            displayName: 'Deploy to Production'
+
+- stage: Test
+  displayName: 'Post-Deployment Tests'
+  dependsOn: 
+  - DeployDev
+  - DeployStaging
+  - DeployProd
+  condition: succeeded()
+  jobs:
+  - job: HealthCheck
+    displayName: 'Health Check Tests'
+    pool:
+      vmImage: 'ubuntu-latest'
+    
+    steps:
+    - script: |
+        # Test development environment
+        if [ "$(Build.SourceBranch)" = "refs/heads/develop" ]; then
+          curl -f $(DEV_SERVICE_URL)/health || exit 1
+        fi
+        
+        # Test staging environment
+        if [ "$(Build.SourceBranch)" = "refs/heads/main" ]; then
+          curl -f $(STAGING_SERVICE_URL)/health || exit 1
+          curl -f $(PROD_SERVICE_URL)/health || exit 1
+        fi
+      displayName: 'Health Check' 

@@ -9,6 +9,14 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Configurations
     {
         public static readonly string TemplateHosting = "TemplateHosting";
 
+        /// <summary>
+        /// Legacy Azure Storage configuration (deprecated, use CloudStorageConfiguration instead)
+        /// </summary>
         public StorageAccountConfiguration StorageAccountConfiguration { get; set; }
+
+        /// <summary>
+        /// Cloud-agnostic storage configuration supporting multiple providers
+        /// </summary>
+        public CloudStorageConfiguration CloudStorageConfiguration { get; set; }
     }
 }

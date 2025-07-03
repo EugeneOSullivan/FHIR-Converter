@@ -1,0 +1,180 @@
+swagger: '2.0'
+info:
+  title: FHIR Converter API
+  description: API for converting healthcare data formats to FHIR
+  version: 1.0.0
+schemes:
+  - https
+produces:
+  - application/json
+consumes:
+  - application/json
+paths:
+  /health:
+    get:
+      summary: Health check endpoint
+      operationId: healthCheck
+      responses:
+        '200':
+          description: Service is healthy
+          schema:
+            type: object
+            properties:
+              status:
+                type: string
+                example: "Healthy"
+              timestamp:
+                type: string
+                format: date-time
+  /convert/hl7v2:
+    post:
+      summary: Convert HL7v2 to FHIR
+      operationId: convertHl7v2
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              message:
+                type: string
+                description: HL7v2 message content
+              template_collection:
+                type: string
+                description: Template collection name
+      responses:
+        '200':
+          description: Conversion successful
+          schema:
+            type: object
+            properties:
+              fhir:
+                type: object
+                description: FHIR resource
+        '400':
+          description: Invalid input
+        '500':
+          description: Conversion error
+  /convert/ccda:
+    post:
+      summary: Convert C-CDA to FHIR
+      operationId: convertCcda
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              document:
+                type: string
+                description: C-CDA document content
+              template_collection:
+                type: string
+                description: Template collection name
+      responses:
+        '200':
+          description: Conversion successful
+          schema:
+            type: object
+            properties:
+              fhir:
+                type: object
+                description: FHIR resource
+        '400':
+          description: Invalid input
+        '500':
+          description: Conversion error
+  /convert/json:
+    post:
+      summary: Convert JSON to FHIR
+      operationId: convertJson
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              data:
+                type: object
+                description: JSON data to convert
+              template_collection:
+                type: string
+                description: Template collection name
+      responses:
+        '200':
+          description: Conversion successful
+          schema:
+            type: object
+            properties:
+              fhir:
+                type: object
+                description: FHIR resource
+        '400':
+          description: Invalid input
+        '500':
+          description: Conversion error
+  /convert/stu3-to-r4:
+    post:
+      summary: Convert FHIR STU3 to R4
+      operationId: convertStu3ToR4
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              stu3_resource:
+                type: object
+                description: FHIR STU3 resource
+      responses:
+        '200':
+          description: Conversion successful
+          schema:
+            type: object
+            properties:
+              r4_resource:
+                type: object
+                description: FHIR R4 resource
+        '400':
+          description: Invalid input
+        '500':
+          description: Conversion error
+  /convert/fhir-to-hl7v2:
+    post:
+      summary: Convert FHIR to HL7v2
+      operationId: convertFhirToHl7v2
+      parameters:
+        - name: body
+          in: body
+          required: true
+          schema:
+            type: object
+            properties:
+              fhir_resource:
+                type: object
+                description: FHIR resource
+              template_collection:
+                type: string
+                description: Template collection name
+      responses:
+        '200':
+          description: Conversion successful
+          schema:
+            type: object
+            properties:
+              hl7v2_message:
+                type: string
+                description: HL7v2 message
+        '400':
+          description: Invalid input
+        '500':
+          description: Conversion error
+x-google-backend:
+  rules:
+    - selector: "*"
+      address: ${cloud_run_url}
+      protocol: h2 
