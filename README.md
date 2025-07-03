@@ -88,8 +88,8 @@ FHIR-Converter/
 ## Development
 
 ### Prerequisites
-- .NET 8.0 SDK
-- Docker & Docker Compose
+- .NET 9.0 SDK
+- Docker & Docker Compose (optional)
 - Terraform 1.5+ (for cloud deployment)
 - Terragrunt 0.45+ (for multi-environment management)
 
@@ -108,22 +108,34 @@ dotnet test
 ### API Endpoints
 ```bash
 # Health check
-curl http://localhost:8080/health
+curl http://localhost:5000/api/v1/health/check
 
 # Convert HL7v2 to FHIR
-curl -X POST http://localhost:8080/api/convert/hl7v2 \
+curl -X POST http://localhost:5000/api/v1/convert/hl7v2-to-fhir \
   -H "Content-Type: application/json" \
-  -d '{"message": "MSH|^~\\&|SENDING_APP|SENDING_FACILITY|RECEIVING_APP|RECEIVING_FACILITY|20231201120000||ADT^A01|MSG00001|P|2.5"}'
+  -d '{
+    "inputDataFormat": "Hl7v2",
+    "inputDataString": "MSH|^~\\&|ADT1|GOOD HEALTH HOSPITAL|GHH LAB, INC.|GOOD HEALTH HOSPITAL|19880818112600+0700|SECURITY|ADT^A01^ADT_A01|MSG00001|P|2.5.1||\nEVN|A01|20070818112300+0700||\nPID|1||PATID1234^5^M11^ADT1^MR^GOOD HEALTH HOSPITAL~123456789^^^USSSA^SS||EVERYMAN^ADAM^A^III||19610615|M||C|2222 HOME STREET^^GREENSBORO^NC^27401-1020|GL|(555) 555-2004|(555)555-2004||S||PATID12345001^2^M10^ADT1^AN^A|444333333|987654^NC|\nNK1|1|NUCLEAR^NELDA^W|SPO^SPOUSE||||NK^NEXT OF KIN\nPV1|1|I|2000^2012^01||||004777^ATTEND^AARON^A|||SUR||||ADM|A0|"
+  }'
 
 # Convert C-CDA to FHIR
-curl -X POST http://localhost:8080/api/convert/ccda \
+curl -X POST http://localhost:5000/api/v1/convert/ccda-to-fhir \
   -H "Content-Type: application/json" \
-  -d '{"document": "<ClinicalDocument>...</ClinicalDocument>"}'
+  -d '{
+    "inputDataFormat": "Ccda",
+    "inputDataString": "<ClinicalDocument>...</ClinicalDocument>"
+  }'
 
 # Convert FHIR STU3 to R4
-curl -X POST http://localhost:8080/api/convert/stu3-to-r4 \
+curl -X POST http://localhost:5000/api/v1/convert/fhir-stu3-to-r4 \
   -H "Content-Type: application/json" \
-  -d '{"stu3_resource": {...}}'
+  -d '{
+    "inputDataFormat": "FhirStu3",
+    "inputDataString": "{\"resourceType\": \"Patient\", \"id\": \"123\"}"
+  }'
+
+# Interactive API Documentation (Development mode)
+open http://localhost:5000/api/v1/swagger
 ```
 
 ---
@@ -193,10 +205,10 @@ Logging__LogLevel__Default=Information                     # Logging level
 ### Local Monitoring
 ```bash
 # Prometheus metrics
-curl http://localhost:8080/metrics
+curl http://localhost:5000/metrics
 
 # Health check
-curl http://localhost:8080/health
+curl http://localhost:5000/health
 
 # Grafana dashboard
 open http://localhost:3000
@@ -277,10 +289,10 @@ dotnet test src/Microsoft.Health.Fhir.Liquid.Converter.FunctionalTests/
 ### API Tests
 ```bash
 # Health check
-curl -f http://localhost:8080/health
+curl -f http://localhost:5000/health
 
 # Sample conversion
-curl -X POST http://localhost:8080/api/convert/hl7v2 \
+curl -X POST http://localhost:5000/api/convert/hl7v2 \
   -H "Content-Type: application/json" \
   -d @data/SampleData/Hl7v2/ADT-A01-01.hl7
 ```
@@ -288,7 +300,7 @@ curl -X POST http://localhost:8080/api/convert/hl7v2 \
 ### Load Testing
 ```bash
 # Use tools like Apache Bench or Artillery
-ab -n 1000 -c 10 http://localhost:8080/health
+ab -n 1000 -c 10 http://localhost:5000/health
 ```
 
 ---
@@ -343,7 +355,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 ### Acknowledgments
 - Based on the original [Microsoft FHIR-Converter](https://github.com/microsoft/FHIR-Converter)
 - Uses Liquid templating engine for data transformation
-- Built with ASP.NET Core 8.0 and .NET 8.0
+- Built with ASP.NET Core 9.0 and .NET 9.0
 
 ---
 

@@ -8,24 +8,24 @@ using System;
 namespace Microsoft.Health.Fhir.TemplateManagement.Configurations
 {
     /// <summary>
-    /// Cloud storage configuration supporting multiple cloud providers
+    /// Configuration for cloud storage providers
     /// </summary>
     public class CloudStorageConfiguration
     {
         /// <summary>
-        /// The cloud provider type (Azure, GCP, etc.)
+        /// The cloud storage provider to use
         /// </summary>
-        public CloudProviderType Provider { get; set; } = CloudProviderType.GCP;
+        public CloudStorageProvider Provider { get; set; } = CloudStorageProvider.Local;
 
         /// <summary>
-        /// Azure-specific configuration
+        /// Azure Storage configuration
         /// </summary>
-        public AzureStorageConfiguration Azure { get; set; }
+        public AzureStorageConfiguration Azure { get; set; } = new();
 
         /// <summary>
-        /// GCP-specific configuration
+        /// GCP Storage configuration
         /// </summary>
-        public GcpStorageConfiguration Gcp { get; set; }
+        public GcpStorageConfiguration Gcp { get; set; } = new();
 
         /// <summary>
         /// Gets the appropriate storage configuration based on the provider
@@ -35,29 +35,12 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Configurations
         {
             return Provider switch
             {
-                CloudProviderType.Azure => Azure,
-                CloudProviderType.GCP => Gcp,
+                CloudStorageProvider.Local => throw new InvalidOperationException("Local provider does not require storage configuration"),
+                CloudStorageProvider.Azure => Azure,
+                CloudStorageProvider.Gcp => Gcp,
                 _ => throw new ArgumentException($"Unsupported cloud provider: {Provider}")
             };
         }
-    }
-
-    /// <summary>
-    /// Supported cloud provider types
-    /// </summary>
-    public enum CloudProviderType
-    {
-        Azure,
-        GCP
-    }
-
-    /// <summary>
-    /// Base interface for storage configurations
-    /// </summary>
-    public interface IStorageConfiguration
-    {
-        string ContainerName { get; set; }
-        string GetContainerUrl();
     }
 
     /// <summary>
@@ -66,17 +49,17 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Configurations
     public class AzureStorageConfiguration : IStorageConfiguration
     {
         /// <summary>
-        /// Azure Storage account name
+        /// Storage account name
         /// </summary>
-        public string StorageAccountName { get; set; }
+        public string StorageAccountName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Container name within the storage account
+        /// Container name
         /// </summary>
-        public string ContainerName { get; set; }
+        public string ContainerName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Azure Storage endpoint suffix (default: blob.core.windows.net)
+        /// Endpoint suffix (e.g., blob.core.windows.net)
         /// </summary>
         public string EndpointSuffix { get; set; } = "blob.core.windows.net";
 
@@ -102,15 +85,15 @@ namespace Microsoft.Health.Fhir.TemplateManagement.Configurations
         /// <summary>
         /// GCP project ID
         /// </summary>
-        public string ProjectId { get; set; }
+        public string ProjectId { get; set; } = string.Empty;
 
         /// <summary>
         /// GCS bucket name
         /// </summary>
-        public string BucketName { get; set; }
+        public string BucketName { get; set; } = string.Empty;
 
         /// <summary>
-        /// Container name within the bucket (optional, defaults to bucket root)
+        /// Container/prefix name within the bucket
         /// </summary>
         public string ContainerName { get; set; } = string.Empty;
 

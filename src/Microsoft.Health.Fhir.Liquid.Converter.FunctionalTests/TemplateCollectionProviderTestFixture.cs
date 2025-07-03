@@ -19,7 +19,7 @@ namespace Microsoft.Health.Fhir.Liquid.Converter.FunctionalTests
     {
         private readonly TemplateCollectionConfiguration _config;
         private readonly IMemoryCache _cache;
-        private readonly IConvertDataTemplateCollectionProviderFactory _convertDataTemplateCollectionProviderFactory;
+        private readonly ConvertDataTemplateCollectionProviderFactory _convertDataTemplateCollectionProviderFactory;
 
         public TemplateCollectionProviderTestFixture()
         {
@@ -37,7 +37,11 @@ namespace Microsoft.Health.Fhir.Liquid.Converter.FunctionalTests
             }
 
             _cache = new MemoryCache(new MemoryCacheOptions());
-            _convertDataTemplateCollectionProviderFactory = new ConvertDataTemplateCollectionProviderFactory(_cache, Options.Create(_config));
+            var templateHostingConfig = new TemplateHostingConfiguration();
+            _convertDataTemplateCollectionProviderFactory = new ConvertDataTemplateCollectionProviderFactory(
+                Options.Create(templateHostingConfig),
+                Options.Create(_config),
+                _cache);
         }
 
         public IConvertDataTemplateCollectionProvider ConvertDataTemplateCollectionProvider { get; set; }

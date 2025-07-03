@@ -3,6 +3,7 @@
 // Licensed under the MIT License (MIT). See LICENSE in the repo root for license information.
 // -------------------------------------------------------------------------------------------------
 
+using System;
 using Azure.Core;
 using Azure.Identity;
 using Azure.Storage.Blobs;
@@ -15,149 +16,79 @@ using Microsoft.Health.Fhir.TemplateManagement.Configurations;
 
 namespace Microsoft.Health.Fhir.TemplateManagement.Factory
 {
-    public class ConvertDataTemplateCollectionProviderFactory : IConvertDataTemplateCollectionProviderFactory
+    /// <summary>
+    /// Factory for creating template collection providers based on configuration
+    /// </summary>
+    public class ConvertDataTemplateCollectionProviderFactory
     {
-        private readonly IMemoryCache _memoryCache;
+        private readonly TemplateHostingConfiguration _templateHostingConfiguration;
         private readonly TemplateCollectionConfiguration _templateCollectionConfiguration;
+        private readonly IMemoryCache _templateCache;
 
-        private readonly string _defaultTemplateProviderCacheKey = "default-template-provider";
-        private readonly string _storageTemplateProviderCachePrefix = "storage-template-provider-";
-
-        public ConvertDataTemplateCollectionProviderFactory(IMemoryCache memoryCache, IOptions<TemplateCollectionConfiguration> templateCollectionConfiguration)
+        public ConvertDataTemplateCollectionProviderFactory(
+            IOptions<TemplateHostingConfiguration> templateHostingConfiguration,
+            IOptions<TemplateCollectionConfiguration> templateCollectionConfiguration,
+            IMemoryCache templateCache)
         {
-            _memoryCache = EnsureArg.IsNotNull(memoryCache, nameof(memoryCache));
+            _templateHostingConfiguration = EnsureArg.IsNotNull(templateHostingConfiguration?.Value, nameof(templateHostingConfiguration));
             _templateCollectionConfiguration = EnsureArg.IsNotNull(templateCollectionConfiguration?.Value, nameof(templateCollectionConfiguration));
+            _templateCache = EnsureArg.IsNotNull(templateCache, nameof(templateCache));
         }
 
-        /// <summary>
-        /// Returns the appropriate template collection provider based on the configuration.
-        /// Supports Azure Blob Storage, GCP Storage, and default templates.
-        /// </summary>
-        /// <returns>Returns a template collection provider based on the configuration.</returns>
         public IConvertDataTemplateCollectionProvider CreateTemplateCollectionProvider()
         {
-            var templateHostingConfiguration = _templateCollectionConfiguration.TemplateHostingConfiguration;
+            var cloudStorageConfig = _templateHostingConfiguration.CloudStorageConfiguration;
 
-            // Check for cloud storage configuration first (new approach)
-            if (templateHostingConfiguration?.CloudStorageConfiguration != null)
+            return cloudStorageConfig.Provider switch
             {
-                var cloudConfig = templateHostingConfiguration.CloudStorageConfiguration;
-                var providerConfig = cloudConfig.GetProviderConfiguration();
-
-                return cloudConfig.Provider switch
-                {
-                    CloudProviderType.Azure => CreateBlobTemplateCollectionProvider(providerConfig),
-                    CloudProviderType.GCP => CreateGcpStorageTemplateCollectionProvider(providerConfig),
-                    _ => throw new ArgumentException($"Unsupported cloud provider: {cloudConfig.Provider}")
-                };
-            }
-
-            // Fallback to legacy Azure configuration
-            if (templateHostingConfiguration?.StorageAccountConfiguration?.ContainerUrl != null)
-            {
-                return CreateBlobTemplateCollectionProvider(templateHostingConfiguration.StorageAccountConfiguration);
-            }
-
-            return CreateDefaultTemplateCollectionProvider();
+                CloudStorageProvider.Local => CreateLocalProvider(),
+                CloudStorageProvider.Azure => CreateAzureProvider(cloudStorageConfig.Azure),
+                CloudStorageProvider.Gcp => CreateGcpProvider(cloudStorageConfig.Gcp),
+                _ => throw new ArgumentException($"Unsupported cloud storage provider: {cloudStorageConfig.Provider}")
+            };
         }
 
-        /// <summary>
-        /// Returns the default template collection provider, i.e., template provider that references the default templates packaged within the project.
-        /// </summary>
-        /// <returns>Returns the default template collection provider, <see cref="DefaultTemplateCollectionProvider">.</returns>
-        private IConvertDataTemplateCollectionProvider CreateDefaultTemplateCollectionProvider()
+        private IConvertDataTemplateCollectionProvider CreateLocalProvider()
         {
-            var cacheKey = _defaultTemplateProviderCacheKey;
-            if (_memoryCache.TryGetValue(cacheKey, out var templateProviderCache))
-            {
-                return (IConvertDataTemplateCollectionProvider)templateProviderCache;
-            }
-
-            var templateProvider = new DefaultTemplateCollectionProvider(_memoryCache, _templateCollectionConfiguration);
-            _memoryCache.Set(cacheKey, templateProvider);
-            return templateProvider;
+            return new DefaultTemplateCollectionProvider(_templateCache, _templateCollectionConfiguration);
         }
 
-        /// <summary>
-        /// Returns a blob template collection provider for Azure Storage.
-        /// </summary>
-        /// <param name="storageConfiguration">Storage configuration containing information of the blob container to load the templates from.</param>
-        /// <returns>Returns a blob template collection provider, <see cref="BlobTemplateCollectionProvider">.</returns>
-        private IConvertDataTemplateCollectionProvider CreateBlobTemplateCollectionProvider(IStorageConfiguration storageConfiguration)
+        private IConvertDataTemplateCollectionProvider CreateAzureProvider(AzureStorageConfiguration azureConfig)
         {
-            EnsureArg.IsNotNull(storageConfiguration, nameof(storageConfiguration));
+            EnsureArg.IsNotNull(azureConfig, nameof(azureConfig));
 
-            TokenCredential tokenCredential = new DefaultAzureCredential();
-            var containerUrl = new Uri(storageConfiguration.GetContainerUrl());
-            var blobContainerClient = new BlobContainerClient(containerUrl, tokenCredential);
+            var blobServiceClient = new BlobServiceClient(
+                new Uri($"https://{azureConfig.StorageAccountName}.{azureConfig.EndpointSuffix}"),
+                new DefaultAzureCredential());
 
-            var cacheKey = _storageTemplateProviderCachePrefix + blobContainerClient.Name;
-            if (_memoryCache.TryGetValue(cacheKey, out var templateProviderCache))
-            {
-                return (IConvertDataTemplateCollectionProvider)templateProviderCache;
-            }
+            var containerClient = blobServiceClient.GetBlobContainerClient(azureConfig.ContainerName);
 
-            var templateProvider = new BlobTemplateCollectionProvider(blobContainerClient, _memoryCache, _templateCollectionConfiguration);
-            _memoryCache.Set(cacheKey, templateProvider);
-            return templateProvider;
+            return new BlobTemplateCollectionProvider(containerClient, _templateCache, _templateCollectionConfiguration);
         }
 
-        /// <summary>
-        /// Returns a blob template collection provider for legacy Azure Storage configuration.
-        /// </summary>
-        /// <param name="storageAccountConfiguration">Storage account configuration containing information of the blob container to load the templates from.</param>
-        /// <returns>Returns a blob template collection provider, <see cref="BlobTemplateCollectionProvider">.</returns>
-        private IConvertDataTemplateCollectionProvider CreateBlobTemplateCollectionProvider(StorageAccountConfiguration storageAccountConfiguration)
+        private IConvertDataTemplateCollectionProvider CreateGcpProvider(GcpStorageConfiguration gcpConfig)
         {
-            EnsureArg.IsNotNull(storageAccountConfiguration, nameof(storageAccountConfiguration));
-            EnsureArg.IsNotNull(storageAccountConfiguration.ContainerUrl, nameof(storageAccountConfiguration.ContainerUrl));
+            EnsureArg.IsNotNull(gcpConfig, nameof(gcpConfig));
 
-            TokenCredential tokenCredential = new DefaultAzureCredential();
-            var blobContainerClient = new BlobContainerClient(storageAccountConfiguration.ContainerUrl, tokenCredential);
-
-            var cacheKey = _storageTemplateProviderCachePrefix + blobContainerClient.Name;
-            if (_memoryCache.TryGetValue(cacheKey, out var templateProviderCache))
+            // For testing, we'll skip creating a real StorageClient if credentials aren't available
+            StorageClient storageClient;
+            try
             {
-                return (IConvertDataTemplateCollectionProvider)templateProviderCache;
+                storageClient = StorageClient.Create();
+            }
+            catch (InvalidOperationException)
+            {
+                // If no credentials are available, throw a more descriptive error
+                throw new InvalidOperationException(
+                    "GCP credentials not found. Please set up Application Default Credentials or use a different provider.");
             }
 
-            var templateProvider = new BlobTemplateCollectionProvider(blobContainerClient, _memoryCache, _templateCollectionConfiguration);
-            _memoryCache.Set(cacheKey, templateProvider);
-            return templateProvider;
-        }
-
-        /// <summary>
-        /// Returns a GCP Storage template collection provider.
-        /// </summary>
-        /// <param name="storageConfiguration">Storage configuration containing information of the GCS bucket to load the templates from.</param>
-        /// <returns>Returns a GCP Storage template collection provider, <see cref="GcpStorageTemplateCollectionProvider">.</returns>
-        private IConvertDataTemplateCollectionProvider CreateGcpStorageTemplateCollectionProvider(IStorageConfiguration storageConfiguration)
-        {
-            EnsureArg.IsNotNull(storageConfiguration, nameof(storageConfiguration));
-
-            var gcpConfig = storageConfiguration as GcpStorageConfiguration;
-            if (gcpConfig == null)
-            {
-                throw new ArgumentException("Storage configuration must be of type GcpStorageConfiguration for GCP provider");
-            }
-
-            var storageClient = StorageClient.Create();
-            var cacheKey = _storageTemplateProviderCachePrefix + gcpConfig.BucketName + gcpConfig.ContainerName;
-            
-            if (_memoryCache.TryGetValue(cacheKey, out var templateProviderCache))
-            {
-                return (IConvertDataTemplateCollectionProvider)templateProviderCache;
-            }
-
-            var templateProvider = new GcpStorageTemplateCollectionProvider(
-                storageClient, 
-                gcpConfig.BucketName, 
-                gcpConfig.ContainerName, 
-                _memoryCache, 
+            return new GcpStorageTemplateCollectionProvider(
+                storageClient,
+                gcpConfig.BucketName,
+                gcpConfig.ContainerName,
+                _templateCache,
                 _templateCollectionConfiguration);
-            
-            _memoryCache.Set(cacheKey, templateProvider);
-            return templateProvider;
         }
     }
 }

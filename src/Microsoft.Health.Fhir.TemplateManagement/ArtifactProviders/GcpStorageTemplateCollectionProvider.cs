@@ -6,6 +6,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
@@ -51,7 +52,7 @@ namespace Microsoft.Health.Fhir.TemplateManagement.ArtifactProviders
             _containerName = containerName;
             _templateCache = EnsureArg.IsNotNull(templateCache, nameof(templateCache));
             _templateCollectionConfiguration = EnsureArg.IsNotNull(templateConfiguration, nameof(templateConfiguration));
-            
+
             _downloadRetryPolicy = Policy
                 .Handle<Exception>()
                 .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromMilliseconds(10));
@@ -102,8 +103,8 @@ namespace Microsoft.Health.Fhir.TemplateManagement.ArtifactProviders
                 if (totalSize > _maxTemplateCollectionSizeInBytes)
                 {
                     throw new TemplateCollectionExceedsSizeLimitException(
-                        $"Template collection size ({totalSize} bytes) exceeds the limit ({_maxTemplateCollectionSizeInBytes} bytes)",
-                        TemplateManagementErrorCode.GcpTemplateCollectionTooLarge);
+                        TemplateManagementErrorCode.GcpTemplateCollectionTooLarge,
+                        $"Template collection size ({totalSize} bytes) exceeds the limit ({_maxTemplateCollectionSizeInBytes} bytes)");
                 }
 
                 templateCollection.Add(templateDictionary);
@@ -112,9 +113,9 @@ namespace Microsoft.Health.Fhir.TemplateManagement.ArtifactProviders
             }
             catch (Exception ex) when (ex is not TemplateCollectionExceedsSizeLimitException)
             {
-                throw new TemplateCollectionException(
-                    $"Failed to retrieve templates from GCP Storage bucket '{_bucketName}'",
+                throw new TemplateManagementException(
                     TemplateManagementErrorCode.GcpTemplateCollectionError,
+                    $"Failed to retrieve templates from GCP Storage bucket '{_bucketName}'",
                     ex);
             }
         }
@@ -144,7 +145,7 @@ namespace Microsoft.Health.Fhir.TemplateManagement.ArtifactProviders
                     // Download the object content
                     using var stream = new MemoryStream();
                     await _storageClient.DownloadObjectAsync(_bucketName, storageObject.Name, stream, cancellationToken: cancellationToken);
-                    
+
                     stream.Position = 0;
                     var content = Encoding.UTF8.GetString(stream.ToArray());
 

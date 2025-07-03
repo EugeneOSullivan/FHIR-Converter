@@ -7,7 +7,7 @@ This project provides a RESTful API for converting healthcare data between HL7v2
 ## Architecture
 
 ### Core Components
-- **ASP.NET Core 8.0 Web API**: Modern, high-performance API framework
+- **ASP.NET Core 9.0 Web API**: Modern, high-performance API framework
 - **Liquid Template Engine**: Flexible data transformation templates
 - **Cloud-Agnostic Storage**: GCP GCS, Azure Blob Storage, or local templates
 - **Health Checks**: Built-in health monitoring and readiness probes
@@ -46,8 +46,8 @@ Microsoft.Health.Fhir.Liquid.Converter.Api/
 ## Quick Start
 
 ### Prerequisites
-- [Docker](https://www.docker.com/products/docker-desktop) installed
-- [.NET 8 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) (for local development)
+- [Docker](https://www.docker.com/products/docker-desktop) installed (optional)
+- [.NET 9 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0) (for local development)
 
 ### Local Development (No Cloud Required)
 
@@ -82,12 +82,12 @@ docker run -p 8080:8080 --rm fhir-converter-api
 
 #### Health Check
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:5000/health
 ```
 
 #### Convert HL7v2 to FHIR
 ```bash
-curl -X POST http://localhost:8080/api/convert/hl7v2 \
+curl -X POST http://localhost:5000/api/convert/hl7v2 \
   -H "Content-Type: application/json" \
   -d '{
     "message": "MSH|^~\\&|SENDING_APP|SENDING_FACILITY|RECEIVING_APP|RECEIVING_FACILITY|20231201120000||ADT^A01|MSG00001|P|2.5",
@@ -97,7 +97,7 @@ curl -X POST http://localhost:8080/api/convert/hl7v2 \
 
 #### Convert C-CDA to FHIR
 ```bash
-curl -X POST http://localhost:8080/api/convert/ccda \
+curl -X POST http://localhost:5000/api/convert/ccda \
   -H "Content-Type: application/json" \
   -d '{
     "document": "<ClinicalDocument>...</ClinicalDocument>",
@@ -107,7 +107,7 @@ curl -X POST http://localhost:8080/api/convert/ccda \
 
 #### Convert JSON to FHIR
 ```bash
-curl -X POST http://localhost:8080/api/convert/json \
+curl -X POST http://localhost:5000/api/convert/json \
   -H "Content-Type: application/json" \
   -d '{
     "data": {"patient": {"id": "123", "name": "John Doe"}},
@@ -117,7 +117,7 @@ curl -X POST http://localhost:8080/api/convert/json \
 
 #### Convert FHIR STU3 to R4
 ```bash
-curl -X POST http://localhost:8080/api/convert/stu3-to-r4 \
+curl -X POST http://localhost:5000/api/convert/stu3-to-r4 \
   -H "Content-Type: application/json" \
   -d '{
     "stu3_resource": {
@@ -130,7 +130,7 @@ curl -X POST http://localhost:8080/api/convert/stu3-to-r4 \
 
 #### Convert FHIR to HL7v2
 ```bash
-curl -X POST http://localhost:8080/api/convert/fhir-to-hl7v2 \
+curl -X POST http://localhost:5000/api/convert/fhir-to-hl7v2 \
   -H "Content-Type: application/json" \
   -d '{
     "fhir_resource": {
@@ -144,7 +144,7 @@ curl -X POST http://localhost:8080/api/convert/fhir-to-hl7v2 \
 
 #### Metrics (Prometheus)
 ```bash
-curl http://localhost:8080/metrics
+curl http://localhost:5000/metrics
 ```
 
 ---

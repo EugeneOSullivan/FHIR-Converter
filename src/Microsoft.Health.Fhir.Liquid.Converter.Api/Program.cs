@@ -4,128 +4,150 @@
 // -------------------------------------------------------------------------------------------------
 
 using System.Reflection;
+using System.Runtime;
 using System.Text.Json;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Health.Fhir.Liquid.Converter.Api.Services;
 using Microsoft.Health.Fhir.Liquid.Converter.Models;
 using Microsoft.Health.Fhir.TemplateManagement.ArtifactProviders;
 using Microsoft.Health.Fhir.TemplateManagement.Configurations;
-using Microsoft.Health.Fhir.TemplateManagement.Factory;
-using Microsoft.OpenApi.Models;
 
-var builder = WebApplication.CreateBuilder(args);
-
-// Add services to the container
-builder.Services.AddControllers()
-    .AddJsonOptions(options =>
-    {
-        options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-        options.JsonSerializerOptions.WriteIndented = true;
-    });
-
-// Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
+namespace Microsoft.Health.Fhir.Liquid.Converter.Api
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
+    public class Program
     {
-        Title = "FHIR Converter API",
-        Version = "v1",
-        Description = "API for converting healthcare data between different formats using FHIR standards",
-        Contact = new OpenApiContact
+        public static void Main(string[] args)
         {
-            Name = "FHIR Converter Team",
-            Email = "fhir-converter@microsoft.com"
+            // Performance optimizations for streaming scenarios
+            ConfigurePerformanceSettings();
+
+            var builder = WebApplication.CreateBuilder(args);
+
+            // Add services to the container
+            builder.Services.AddControllers()
+                .AddJsonOptions(options =>
+                {
+                    options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                    options.JsonSerializerOptions.WriteIndented = true;
+                });
+
+            // Add response compression for better performance
+            builder.Services.AddResponseCompression();
+
+            // Configure memory cache with optimized settings
+            builder.Services.AddMemoryCache(options =>
+            {
+                options.SizeLimit = 1024; // 1GB limit
+                options.ExpirationScanFrequency = TimeSpan.FromMinutes(5);
+            });
+
+            // Add health checks
+            builder.Services.AddHealthChecks()
+                .AddCheck("self", () => HealthCheckResult.Healthy());
+
+            // Add Swagger/OpenAPI support
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen(c =>
+            {
+                c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+                {
+                    Title = "FHIR Converter API",
+                    Version = "v1",
+                    Description = "High-performance FHIR data format conversion API"
+                });
+
+                // Include XML comments if available
+                var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
+                var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
+                if (File.Exists(xmlPath))
+                {
+                    c.IncludeXmlComments(xmlPath);
+                }
+            });
+
+            // Configure services
+            builder.Services.Configure<ProcessorSettings>(
+                builder.Configuration.GetSection("ProcessorSettings"));
+
+            builder.Services.Configure<TemplateCollectionConfiguration>(
+                builder.Configuration.GetSection("TemplateCollectionConfiguration"));
+
+            builder.Services.Configure<TemplateHostingConfiguration>(
+                builder.Configuration.GetSection("TemplateHosting"));
+
+            // Register template collection provider
+            builder.Services.AddSingleton<IConvertDataTemplateCollectionProvider, DefaultTemplateCollectionProvider>();
+
+            // Register conversion service
+            builder.Services.AddScoped<IConversionService, ConversionService>();
+
+            // Configure HTTP client with optimized settings
+            builder.Services.AddHttpClient("TemplateClient")
+                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+                {
+                    MaxConnectionsPerServer = 100,
+                    AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+                });
+
+            var app = builder.Build();
+
+            // Configure the HTTP request pipeline
+            if (app.Environment.IsDevelopment())
+            {
+                app.UseSwagger();
+                app.UseSwaggerUI(c =>
+                {
+                    c.SwaggerEndpoint("/swagger/v1/swagger.json", "FHIR Converter API v1");
+                    c.RoutePrefix = "api/v1/swagger";
+                });
+            }
+
+            // Enable response compression
+            app.UseResponseCompression();
+
+            app.UseHttpsRedirection();
+            app.UseAuthorization();
+
+            // Configure endpoints
+            app.MapControllers();
+            app.MapHealthChecks("/health/check");
+
+            // Add performance monitoring endpoint
+            app.MapGet("/metrics", () =>
+            {
+                var metrics = new
+                {
+                    timestamp = DateTime.UtcNow,
+                    uptime = Environment.TickCount64,
+                    memory = GC.GetTotalMemory(false),
+                    gc_collections = new
+                    {
+                        gen0 = GC.CollectionCount(0),
+                        gen1 = GC.CollectionCount(1),
+                        gen2 = GC.CollectionCount(2)
+                    },
+                    threads = System.Diagnostics.Process.GetCurrentProcess().Threads.Count
+                };
+                return Results.Json(metrics);
+            });
+
+            app.Run();
         }
-    });
 
-    // Include XML comments
-    var xmlFile = $"{Assembly.GetExecutingAssembly().GetName().Name}.xml";
-    var xmlPath = Path.Combine(AppContext.BaseDirectory, xmlFile);
-    if (File.Exists(xmlPath))
-    {
-        c.IncludeXmlComments(xmlPath);
+        private static void ConfigurePerformanceSettings()
+        {
+            // Optimize thread pool for high concurrency
+            ThreadPool.SetMinThreads(Environment.ProcessorCount * 2, Environment.ProcessorCount * 2);
+            ThreadPool.SetMaxThreads(Environment.ProcessorCount * 8, Environment.ProcessorCount * 8);
+
+            // Optimize GC for high-throughput scenarios
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+            
+            // Set GC latency mode for better response times
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Production")
+            {
+                GCSettings.LatencyMode = GCLatencyMode.SustainedLowLatency;
+            }
+        }
     }
-
-    // Add API version parameter
-    c.AddSecurityDefinition("ApiKey", new OpenApiSecurityScheme
-    {
-        Type = SecuritySchemeType.ApiKey,
-        In = ParameterLocation.Header,
-        Name = "X-API-Key",
-        Description = "API Key for authentication"
-    });
-});
-
-// Add health checks
-builder.Services.AddHealthChecks()
-    .AddCheck("self", () => HealthCheckResult.Healthy(), tags: new[] { "self" });
-
-// Add memory cache
-builder.Services.AddMemoryCache();
-
-// Configure options
-builder.Services.Configure<ProcessorSettings>(builder.Configuration.GetSection("ProcessorSettings"));
-builder.Services.Configure<TemplateCollectionConfiguration>(builder.Configuration.GetSection("TemplateCollectionConfiguration"));
-
-// Add template provider factory
-builder.Services.AddSingleton<ConvertDataTemplateCollectionProviderFactory>();
-
-// Add template provider
-builder.Services.AddSingleton<IConvertDataTemplateCollectionProvider>(provider =>
-{
-    var factory = provider.GetRequiredService<ConvertDataTemplateCollectionProviderFactory>();
-    return factory.CreateTemplateCollectionProvider();
-});
-
-// Add conversion service
-builder.Services.AddScoped<IConversionService, ConversionService>();
-
-// Add logging
-builder.Services.AddLogging(logging =>
-{
-    logging.AddConsole();
-    logging.AddDebug();
-    logging.SetMinimumLevel(LogLevel.Information);
-});
-
-// Add CORS
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
-
-var app = builder.Build();
-
-// Configure the HTTP request pipeline
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "FHIR Converter API v1");
-        c.RoutePrefix = "api/v1/swagger";
-    });
-}
-
-// Add CORS
-app.UseCors();
-
-// Add routing
-app.UseRouting();
-
-// Add health checks endpoint
-app.MapHealthChecks("/health/check");
-
-// Add controllers
-app.MapControllers();
-
-// Add global exception handler
-app.UseExceptionHandler("/error");
-
-app.Run(); 
+} 

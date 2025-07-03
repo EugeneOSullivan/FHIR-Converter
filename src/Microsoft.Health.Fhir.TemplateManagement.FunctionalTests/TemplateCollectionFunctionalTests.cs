@@ -668,7 +668,11 @@ namespace Microsoft.Health.Fhir.TemplateManagement.FunctionalTests
 
         private IConvertDataTemplateCollectionProvider GetDefaultTemplateCollectionProvider()
         {
-            var factory = new ConvertDataTemplateCollectionProviderFactory(cache, Options.Create(_config));
+            var templateHostingConfig = new TemplateHostingConfiguration();
+            var factory = new ConvertDataTemplateCollectionProviderFactory(
+                Options.Create(templateHostingConfig),
+                Options.Create(_config),
+                cache);
             return factory.CreateTemplateCollectionProvider();
         }
     }

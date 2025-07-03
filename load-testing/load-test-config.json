@@ -1,0 +1,64 @@
+{
+  "testScenarios": {
+    "smoke": {
+      "description": "Basic functionality test with low load",
+      "requests": 100,
+      "concurrency": 5,
+      "duration": "30s",
+      "rampUp": "10s"
+    },
+    "load": {
+      "description": "Normal load testing",
+      "requests": 1000,
+      "concurrency": 20,
+      "duration": "2m",
+      "rampUp": "30s"
+    },
+    "stress": {
+      "description": "Stress testing with high concurrency",
+      "requests": 5000,
+      "concurrency": 50,
+      "duration": "5m",
+      "rampUp": "1m"
+    },
+    "spike": {
+      "description": "Spike testing with sudden load increase",
+      "requests": 2000,
+      "concurrency": 100,
+      "duration": "1m",
+      "rampUp": "5s"
+    },
+    "endurance": {
+      "description": "Long-running endurance test",
+      "requests": 10000,
+      "concurrency": 30,
+      "duration": "10m",
+      "rampUp": "2m"
+    },
+    "streaming": {
+      "description": "High-volume streaming simulation",
+      "requests": 20000,
+      "concurrency": 100,
+      "duration": "15m",
+      "rampUp": "3m"
+    }
+  },
+  "endpoints": {
+    "baseUrl": "http://localhost:5000",
+    "health": "/api/v1/health/check",
+    "hl7v2": "/api/v1/convert/hl7v2-to-fhir",
+    "ccda": "/api/v1/convert/ccda-to-fhir",
+    "json": "/api/v1/convert/json-to-fhir",
+    "metrics": "/metrics"
+  },
+  "testData": {
+    "hl7v2": "data/SampleData/Hl7v2/ADT01-28.hl7",
+    "ccda": "data/SampleData/Ccda/170.314B2_Amb_CCD.ccda",
+    "json": "data/SampleData/Json/ExamplePatient.json"
+  },
+  "performanceThresholds": {
+    "maxResponseTime": 5000,
+    "maxErrorRate": 0.05,
+    "minThroughput": 50
+  }
+} 
